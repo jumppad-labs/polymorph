@@ -107,7 +107,7 @@ This reads the OpenAPI spec and auto-generates endpoints for every path + operat
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `path` | string | (required) | Path to an OpenAPI 3.0 or 3.1 YAML/JSON spec file |
+| `path` | string | (required) | Local path or remote source to an OpenAPI 3.0 or 3.1 YAML/JSON spec file |
 | `rows` | int | 10 | Number of items in array responses |
 | `seed` | int | (random) | Random seed for deterministic mock data |
 
@@ -488,7 +488,7 @@ This reads all `.proto` files from the path, extracts service/method definitions
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `path` | string | (required) | Path to a `.proto` file or directory containing `.proto` files |
+| `path` | string | (required) | Local path or remote source to a `.proto` file or directory containing `.proto` files |
 | `rows` | int | 10 | Number of items in repeated fields and array responses |
 | `seed` | int | (random) | Random seed for deterministic mock data |
 
@@ -497,6 +497,26 @@ The `package` field is optional when `proto` is set -- it's inferred from the pr
 Manual `handle` blocks take priority over proto-derived routes, so you can override specific methods while the proto handles everything else. `resource` blocks coexist independently.
 
 Well-known types like `google.protobuf.Timestamp` and `google.protobuf.Duration` are resolved automatically. See [examples/connect-proto.hcl](examples/connect-proto.hcl).
+
+### Remote Sources
+
+Both `spec` and `proto` paths support remote sources via [go-getter](https://github.com/hashicorp/go-getter). Remote content is downloaded to a temporary directory at startup.
+
+```hcl
+# HTTP URL
+spec { path = "https://petstore3.swagger.io/api/v3/openapi.json" }
+
+# GitHub repository subdirectory
+proto { path = "github.com/myorg/protos//api/v1" }
+
+# Git with specific tag
+proto { path = "github.com/myorg/protos//api/v1?ref=v2.0.0" }
+
+# S3
+spec { path = "s3::https://s3.amazonaws.com/my-bucket/openapi.yaml" }
+```
+
+Local paths (relative or absolute) continue to work as before -- go-getter is only invoked for remote sources.
 
 ### Reverse Proxy
 

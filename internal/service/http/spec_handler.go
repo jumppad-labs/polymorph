@@ -6,12 +6,14 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/jumppad-labs/polymorph/internal/config"
+	"github.com/jumppad-labs/polymorph/internal/fetch"
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/renderer"
 )
@@ -33,10 +35,45 @@ type specRoute struct {
 }
 
 // NewSpecHandler loads an OpenAPI 3.x spec and builds routes with pre-generated mock responses.
+// The spec path can be a local file or a remote URL (HTTP, git, S3, GCS, etc.).
 func NewSpecHandler(cfg *config.SpecConfig, logger *slog.Logger) (*SpecHandler, error) {
-	specBytes, err := os.ReadFile(cfg.Path)
+	result, err := fetch.Path(cfg.Path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read spec file %q: %w", cfg.Path, err)
+		return nil, fmt.Errorf("failed to fetch spec %q: %w", cfg.Path, err)
+	}
+	defer result.Close()
+
+	// For remote sources, result.Path is a directory — find the spec file inside.
+	// For local sources, result.Path is the original path (file or dir).
+	specPath := result.Path
+	info, err := os.Stat(specPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat spec path %q: %w", specPath, err)
+	}
+	if info.IsDir() {
+		// Look for a single spec file in the fetched directory
+		entries, err := os.ReadDir(specPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read spec directory: %w", err)
+		}
+		found := false
+		for _, e := range entries {
+			if !e.IsDir() && (strings.HasSuffix(e.Name(), ".yaml") ||
+				strings.HasSuffix(e.Name(), ".yml") ||
+				strings.HasSuffix(e.Name(), ".json")) {
+				specPath = filepath.Join(specPath, e.Name())
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("no .yaml/.yml/.json spec file found in %q", result.Path)
+		}
+	}
+
+	specBytes, err := os.ReadFile(specPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read spec file %q: %w", specPath, err)
 	}
 
 	doc, err := libopenapi.NewDocument(specBytes)

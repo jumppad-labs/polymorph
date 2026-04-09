@@ -15,6 +15,7 @@ import (
 
 	"github.com/bufbuild/protocompile"
 	"github.com/jumppad-labs/polymorph/internal/config"
+	"github.com/jumppad-labs/polymorph/internal/fetch"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -45,8 +46,15 @@ type ProtoHandler struct {
 }
 
 // NewProtoHandler compiles proto files and builds mock routes.
+// The proto path can be a local file/directory or a remote source (HTTP, git, S3, GCS, etc.).
 func NewProtoHandler(cfg *config.ProtoConfig, packageName string, logger *slog.Logger) (*ProtoHandler, error) {
-	protoFiles, importDir, err := discoverProtoFiles(cfg.Path)
+	result, err := fetch.Path(cfg.Path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch proto source %q: %w", cfg.Path, err)
+	}
+	defer result.Close()
+
+	protoFiles, importDir, err := discoverProtoFiles(result.Path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to discover proto files: %w", err)
 	}

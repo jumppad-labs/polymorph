@@ -49,7 +49,7 @@ func TestNewSpecHandler_InvalidPath(t *testing.T) {
 	sh, err := NewSpecHandler(cfg, slog.Default())
 	require.Error(t, err)
 	require.Nil(t, sh)
-	require.Contains(t, err.Error(), "failed to read spec file")
+	require.Contains(t, err.Error(), "no such file or directory")
 }
 
 func TestNewSpecHandler_InvalidSpec(t *testing.T) {
