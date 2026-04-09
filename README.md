@@ -107,7 +107,7 @@ This reads the OpenAPI spec and auto-generates endpoints for every path + operat
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `path` | string | (required) | Local path or remote source to an OpenAPI 3.0 or 3.1 YAML/JSON spec file |
+| `path` | string | (required) | Local path or [remote source](#remote-sources) to an OpenAPI 3.0 or 3.1 YAML/JSON spec file |
 | `rows` | int | 10 | Number of items in array responses |
 | `seed` | int | (random) | Random seed for deterministic mock data |
 
@@ -488,7 +488,7 @@ This reads all `.proto` files from the path, extracts service/method definitions
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `path` | string | (required) | Local path or remote source to a `.proto` file or directory containing `.proto` files |
+| `path` | string | (required) | Local path or [remote source](#remote-sources) to a `.proto` file or directory containing `.proto` files |
 | `rows` | int | 10 | Number of items in repeated fields and array responses |
 | `seed` | int | (random) | Random seed for deterministic mock data |
 
