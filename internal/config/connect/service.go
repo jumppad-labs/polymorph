@@ -23,9 +23,10 @@ type Service struct {
 	Logging *config.LoggingConfig `hcl:"logging,block"`
 
 	// Connect-specific fields
-	Package   string                   `hcl:"package"`
+	Package   string                   `hcl:"package,optional"`
 	Resources []*config.ResourceConfig `hcl:"resource,block"`
 	Handlers  []*Handler               `hcl:"handle,block"`
+	Proto     *config.ProtoConfig      `hcl:"proto,block"`
 
 	// State set by parser (not from HCL)
 	Vars      map[string]cty.Value
@@ -55,8 +56,11 @@ func (c *Service) Validate() error {
 	if err := config.ValidateBase(c); err != nil {
 		return err
 	}
-	if c.Package == "" {
-		return fmt.Errorf("service %q: package is required for connect services", c.Name)
+	if c.Package == "" && c.Proto == nil {
+		return fmt.Errorf("service %q: package is required (set it explicitly or provide a proto block)", c.Name)
+	}
+	if c.Proto != nil && c.Proto.Path == "" {
+		return fmt.Errorf("service %q: proto path is required", c.Name)
 	}
 	return nil
 }

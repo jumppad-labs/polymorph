@@ -398,7 +398,7 @@ func TestValidate_ConnectRequiresPackage(t *testing.T) {
 	}
 	err := Validate(cfg)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "package is required for connect services")
+	require.Contains(t, err.Error(), "package is required")
 }
 
 func TestParse_TargetOnlyForProxy(t *testing.T) {

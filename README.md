@@ -458,6 +458,46 @@ service "connect" "user-api" {
 }
 ```
 
+### Connect-RPC from Proto
+
+Point at `.proto` files and Polymorph auto-generates mock ConnectRPC endpoints for every service and method defined in the proto. No code generation or `protoc`/`buf` required at runtime -- proto files are compiled in-process.
+
+```hcl
+service "connect" "bookstore" {
+  listen = "0.0.0.0:8080"
+
+  proto {
+    path = "./proto"    # directory or single .proto file
+    rows = 5            # items in repeated fields (default: 10)
+    seed = 42           # deterministic mock data (optional)
+  }
+
+  # Override specific methods with custom behavior
+  handle "GetBook" {
+    response {
+      body = jsonencode({
+        id    = "custom-001"
+        title = "The Art of Mock Services"
+      })
+    }
+  }
+}
+```
+
+This reads all `.proto` files from the path, extracts service/method definitions, and generates mock JSON responses from the response message field types. Routes are registered at `/<package>.<Service>/<Method>` following the Connect protocol.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `path` | string | (required) | Path to a `.proto` file or directory containing `.proto` files |
+| `rows` | int | 10 | Number of items in repeated fields and array responses |
+| `seed` | int | (random) | Random seed for deterministic mock data |
+
+The `package` field is optional when `proto` is set -- it's inferred from the proto file's `package` declaration. Set it explicitly to override.
+
+Manual `handle` blocks take priority over proto-derived routes, so you can override specific methods while the proto handles everything else. `resource` blocks coexist independently.
+
+Well-known types like `google.protobuf.Timestamp` and `google.protobuf.Duration` are resolved automatically. See [examples/connect-proto.hcl](examples/connect-proto.hcl).
+
 ### Reverse Proxy
 
 Proxy requests to an upstream target with header injection and local route overrides:
@@ -682,6 +722,7 @@ Expressions in CLI configs support `flag.*` for flags, `arg.*` for positional ar
 | [tcp-patterns.hcl](examples/tcp-patterns.hcl) | TCP pattern matching (Redis-like) |
 | [postgres.hcl](examples/postgres.hcl) | PostgreSQL with tables, auth, and custom queries |
 | [connect-rpc.hcl](examples/connect-rpc.hcl) | Connect-RPC with resources, custom methods, and steps |
+| [connect-proto.hcl](examples/connect-proto.hcl) | Connect-RPC from proto definitions with handle overrides |
 | [proxy-reverse.hcl](examples/proxy-reverse.hcl) | Reverse proxy with header transforms |
 | [https.hcl](examples/https.hcl) | HTTPS with auto-generated self-signed certificate |
 | [observability.hcl](examples/observability.hcl) | Logging, tracing, and metrics configuration |

@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/jumppad-labs/polymorph/internal/config"
 	configconnect "github.com/jumppad-labs/polymorph/internal/config/connect"
 	"github.com/stretchr/testify/require"
@@ -156,6 +158,98 @@ func TestConnectServiceCRUD(t *testing.T) {
 		bytes.NewBuffer(mustMarshal(map[string]any{"id": "test-123"})))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
+
+func TestConnectServiceProto(t *testing.T) {
+	seed := int64(42)
+	cfg := &configconnect.Service{
+		Name:   "proto-api",
+		Listen: "127.0.0.1:0",
+		Proto: &config.ProtoConfig{
+			Path: "testdata/simple.proto",
+			Seed: &seed,
+		},
+	}
+
+	svc, err := NewConnectService(cfg, slog.Default())
+	require.NoError(t, err)
+
+	// Package should be inferred from proto
+	require.Equal(t, "test.v1", cfg.Package)
+
+	ctx := context.Background()
+	err = svc.Start(ctx)
+	require.NoError(t, err)
+	defer svc.Stop(ctx)
+	time.Sleep(100 * time.Millisecond)
+
+	addr := svc.listener.Addr().String()
+	baseURL := "http://" + addr
+
+	// Test GetUser
+	resp := makeRequest(t, baseURL+"/test.v1.UserService/GetUser", map[string]any{"id": "abc"})
+	require.Contains(t, resp, "name")
+	require.Contains(t, resp, "email")
+	require.Contains(t, resp, "age")
+
+	// Test GetOrder
+	resp = makeRequest(t, baseURL+"/test.v1.OrderService/GetOrder", map[string]any{"id": "123"})
+	require.Contains(t, resp, "userId")
+	require.Contains(t, resp, "total")
+
+	// Test non-existent method returns 404
+	httpResp, err := http.Post(baseURL+"/test.v1.UserService/NonExistent",
+		"application/json", bytes.NewBuffer(mustMarshal(map[string]any{})))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNotFound, httpResp.StatusCode)
+}
+
+func TestConnectServiceProtoWithHandleOverride(t *testing.T) {
+	seed := int64(42)
+	cfg := &configconnect.Service{
+		Name:    "proto-override-api",
+		Listen:  "127.0.0.1:0",
+		Package: "test.v1",
+		Proto: &config.ProtoConfig{
+			Path: "testdata/simple.proto",
+			Seed: &seed,
+		},
+		Handlers: []*configconnect.Handler{
+			{
+				Name: "GetUser",
+				Response: &config.ResponseConfig{
+					BodyExpr: makeHCLExpr(t, `jsonencode({"id": "override", "name": "Custom User"})`),
+				},
+			},
+		},
+	}
+
+	svc, err := NewConnectService(cfg, slog.Default())
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	err = svc.Start(ctx)
+	require.NoError(t, err)
+	defer svc.Stop(ctx)
+	time.Sleep(100 * time.Millisecond)
+
+	addr := svc.listener.Addr().String()
+
+	// The handle block should override the proto-derived GetUser
+	resp := makeRequest(t, "http://"+addr+"/test.v1.UserService/GetUser", map[string]any{"id": "abc"})
+	require.Equal(t, "override", resp["id"])
+	require.Equal(t, "Custom User", resp["name"])
+
+	// GetOrder (not overridden) should still return proto mock
+	resp = makeRequest(t, "http://"+addr+"/test.v1.OrderService/GetOrder", map[string]any{"id": "abc"})
+	require.Contains(t, resp, "total")
+}
+
+func makeHCLExpr(t *testing.T, expr string) hcl.Expression {
+	t.Helper()
+	file, diags := hclsyntax.ParseExpression([]byte(expr), "test.hcl", hcl.Pos{Line: 1, Column: 1})
+	require.False(t, diags.HasErrors(), "failed to parse HCL expression: %s", diags.Error())
+	return file
 }
 
 func makeRequest(t *testing.T, url string, body map[string]any) map[string]any {

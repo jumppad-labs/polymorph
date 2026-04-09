@@ -31,7 +31,7 @@ type ConnectService struct {
 
 // NewConnectService creates a new Connect-RPC service
 func NewConnectService(cfg *configconnect.Service, logger *slog.Logger) (*ConnectService, error) {
-	if cfg.Package == "" {
+	if cfg.Package == "" && cfg.Proto == nil {
 		return nil, fmt.Errorf("package is required for connect service")
 	}
 
@@ -58,6 +58,19 @@ func NewConnectService(cfg *configconnect.Service, logger *slog.Logger) (*Connec
 		}
 	}
 
+	// Parse proto files first (if configured) so we can infer package and service names
+	var protoHandler *ProtoHandler
+	if cfg.Proto != nil {
+		var err error
+		protoHandler, err = NewProtoHandler(cfg.Proto, cfg.Package, logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create proto handler: %w", err)
+		}
+		if cfg.Package == "" {
+			cfg.Package = protoHandler.Package()
+		}
+	}
+
 	svc := &ConnectService{
 		name:             cfg.Name,
 		config:           cfg,
@@ -68,10 +81,12 @@ func NewConnectService(cfg *configconnect.Service, logger *slog.Logger) (*Connec
 	}
 
 	// Determine service name for custom methods
-	// If there are resources, use the first one; otherwise derive from service name
+	// Priority: first resource name > first proto service name > config name
 	serviceName := cfg.Name + "Service"
 	if len(cfg.Resources) > 0 {
 		serviceName = capitalizeFirst(cfg.Resources[0].Name) + "Service"
+	} else if protoHandler != nil && len(protoHandler.Services()) > 0 {
+		serviceName = protoHandler.Services()[0].name
 	}
 
 	// Create custom method handlers from handle blocks
@@ -92,11 +107,18 @@ func NewConnectService(cfg *configconnect.Service, logger *slog.Logger) (*Connec
 		svc.mux.Handle("/", h2c.NewHandler(handler, &http2.Server{}))
 	}
 
-	// Register custom method handlers
+	// Register custom method handlers (higher priority than proto routes)
+	customPaths := make(map[string]bool)
 	for _, mh := range customHandlers {
 		path, handler := mh.RegisterHandler()
 		svc.mux.HandleFunc(path, handler)
+		customPaths[path] = true
 		svc.logger.Info("registered custom method", "path", path)
+	}
+
+	// Register proto-derived routes (lowest priority — skip paths already handled)
+	if protoHandler != nil {
+		protoHandler.RegisterRoutes(svc.mux, customPaths)
 	}
 
 	return svc, nil

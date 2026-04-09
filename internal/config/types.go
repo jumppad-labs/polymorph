@@ -149,6 +149,13 @@ type SpecConfig struct {
 	Body hcl.Body `hcl:",remain"`
 }
 
+// ProtoConfig defines proto files to serve fake ConnectRPC responses from
+type ProtoConfig struct {
+	Path string `hcl:"path"`
+	Rows *int   `hcl:"rows,optional"`
+	Seed *int64 `hcl:"seed,optional"`
+}
+
 // AuthConfig defines authentication for postgres services
 type AuthConfig struct {
 	Users    map[string]string `hcl:"users"`
