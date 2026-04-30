@@ -1,0 +1,6 @@
+apiVersion: v2
+name: polymorph
+description: A Helm chart for deploying Polymorph services
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
