@@ -42,12 +42,13 @@ type ProtoHandler struct {
 	routes   []*protoRoute
 	services []protoService
 	pkg      string // proto package name
+	prefix   string // optional URL prefix (e.g. "/internal")
 	logger   *slog.Logger
 }
 
 // NewProtoHandler compiles proto files and builds mock routes.
 // The proto path can be a local file/directory or a remote source (HTTP, git, S3, GCS, etc.).
-func NewProtoHandler(cfg *config.ProtoConfig, packageName string, logger *slog.Logger) (*ProtoHandler, error) {
+func NewProtoHandler(cfg *config.ProtoConfig, packageName, prefix string, logger *slog.Logger) (*ProtoHandler, error) {
 	result, err := fetch.Path(cfg.Path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch proto source %q: %w", cfg.Path, err)
@@ -87,7 +88,7 @@ func NewProtoHandler(cfg *config.ProtoConfig, packageName string, logger *slog.L
 		rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 	}
 
-	ph := &ProtoHandler{logger: logger}
+	ph := &ProtoHandler{prefix: prefix, logger: logger}
 
 	for _, fd := range compiled {
 		if ph.pkg == "" {
@@ -113,7 +114,7 @@ func NewProtoHandler(cfg *config.ProtoConfig, packageName string, logger *slog.L
 					pkg = string(fd.Package())
 				}
 
-				path := fmt.Sprintf("/%s.%s/%s", pkg, svc.Name(), m.Name())
+				path := fmt.Sprintf("%s/%s.%s/%s", ph.prefix, pkg, svc.Name(), m.Name())
 				resp, err := generateMockJSON(m.Output(), rows, rng)
 				if err != nil {
 					logger.Warn("failed to generate mock response",

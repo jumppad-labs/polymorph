@@ -23,6 +23,7 @@ type Service struct {
 	Logging *config.LoggingConfig `hcl:"logging,block"`
 
 	// Connect-specific fields
+	Prefix    string                   `hcl:"prefix,optional"`
 	Package   string                   `hcl:"package,optional"`
 	Resources []*config.ResourceConfig `hcl:"resource,block"`
 	Handlers  []*Handler               `hcl:"handle,block"`
@@ -36,6 +37,8 @@ type Service struct {
 // Handler is a Connect-RPC method handler.
 type Handler struct {
 	Name     string                 `hcl:"name,label"`
+	Package  string                 `hcl:"package,optional"`
+	Service  string                 `hcl:"service,optional"`
 	Steps    []*config.StepConfig   `hcl:"step,block"`
 	Response *config.ResponseConfig `hcl:"response,block"`
 }

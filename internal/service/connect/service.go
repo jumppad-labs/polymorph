@@ -62,7 +62,7 @@ func NewConnectService(cfg *configconnect.Service, logger *slog.Logger) (*Connec
 	var protoHandler *ProtoHandler
 	if cfg.Proto != nil {
 		var err error
-		protoHandler, err = NewProtoHandler(cfg.Proto, cfg.Package, logger)
+		protoHandler, err = NewProtoHandler(cfg.Proto, cfg.Package, cfg.Prefix, logger)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create proto handler: %w", err)
 		}
@@ -92,10 +92,31 @@ func NewConnectService(cfg *configconnect.Service, logger *slog.Logger) (*Connec
 	// Create custom method handlers from handle blocks
 	var customHandlers []*CustomMethodHandler
 	for _, handler := range cfg.Handlers {
-		mh, err := NewCustomMethodHandler(handler, cfg.Package, serviceName, cfg.Vars)
+		handlerServiceName := serviceName
+		if handler.Service != "" {
+			handlerServiceName = handler.Service
+		}
+		handlerPackage := cfg.Package
+		if handler.Package != "" {
+			handlerPackage = handler.Package
+		}
+		mh, err := NewCustomMethodHandler(handler, handlerPackage, handlerServiceName, cfg.Prefix, cfg.Vars)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create custom method handler for %q: %w", handler.Name, err)
 		}
+		// Wire up proto output descriptor if available
+		if protoHandler != nil {
+			for _, ps := range protoHandler.Services() {
+				if ps.name == handlerServiceName {
+					for _, pm := range ps.methods {
+						if pm.name == handler.Name {
+							mh.SetOutputDescriptor(pm.output)
+						}
+					}
+				}
+			}
+		}
+
 		customHandlers = append(customHandlers, mh)
 	}
 	svc.customHandlers = customHandlers
