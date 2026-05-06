@@ -13,7 +13,7 @@ import (
 func TestNewProtoHandler_SingleFile(t *testing.T) {
 	ph, err := NewProtoHandler(&config.ProtoConfig{
 		Path: "testdata/simple.proto",
-	}, "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	}, "", "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	require.NoError(t, err)
 
 	require.Equal(t, "test.v1", ph.Package())
@@ -51,7 +51,7 @@ message HelloResponse { string message = 1; }
 
 	ph, err := NewProtoHandler(&config.ProtoConfig{
 		Path: dir,
-	}, "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	}, "", "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	require.NoError(t, err)
 	require.Equal(t, "myapi.v1", ph.Package())
 	require.Len(t, ph.Services(), 1)
@@ -63,7 +63,7 @@ message HelloResponse { string message = 1; }
 func TestNewProtoHandler_NonexistentPath(t *testing.T) {
 	_, err := NewProtoHandler(&config.ProtoConfig{
 		Path: "/nonexistent/path",
-	}, "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	}, "", "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "cannot access")
 }
@@ -71,7 +71,7 @@ func TestNewProtoHandler_NonexistentPath(t *testing.T) {
 func TestNewProtoHandler_InvalidProto(t *testing.T) {
 	_, err := NewProtoHandler(&config.ProtoConfig{
 		Path: "testdata/invalid.proto",
-	}, "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	}, "", "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to compile")
 }
@@ -80,7 +80,7 @@ func TestNewProtoHandler_WellKnownTypes(t *testing.T) {
 	// simple.proto imports google/protobuf/timestamp.proto
 	ph, err := NewProtoHandler(&config.ProtoConfig{
 		Path: "testdata/simple.proto",
-	}, "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	}, "", "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	require.NoError(t, err)
 	require.NotNil(t, ph)
 
@@ -91,7 +91,7 @@ func TestNewProtoHandler_WellKnownTypes(t *testing.T) {
 func TestNewProtoHandler_PackageOverride(t *testing.T) {
 	ph, err := NewProtoHandler(&config.ProtoConfig{
 		Path: "testdata/simple.proto",
-	}, "custom.pkg", slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	}, "custom.pkg", "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	require.NoError(t, err)
 
 	// Routes should use the override package
@@ -108,7 +108,7 @@ func TestNewProtoHandler_PackageOverride(t *testing.T) {
 func TestNewProtoHandler_RoutePaths(t *testing.T) {
 	ph, err := NewProtoHandler(&config.ProtoConfig{
 		Path: "testdata/simple.proto",
-	}, "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	}, "", "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	require.NoError(t, err)
 
 	paths := routePaths(ph.routes)
@@ -123,13 +123,13 @@ func TestNewProtoHandler_DeterministicSeed(t *testing.T) {
 	ph1, err := NewProtoHandler(&config.ProtoConfig{
 		Path: "testdata/simple.proto",
 		Seed: &seed,
-	}, "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	}, "", "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	require.NoError(t, err)
 
 	ph2, err := NewProtoHandler(&config.ProtoConfig{
 		Path: "testdata/simple.proto",
 		Seed: &seed,
-	}, "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	}, "", "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	require.NoError(t, err)
 
 	// Same seed should produce identical responses
@@ -145,7 +145,7 @@ func TestNewProtoHandler_MockResponseFields(t *testing.T) {
 	ph, err := NewProtoHandler(&config.ProtoConfig{
 		Path: "testdata/simple.proto",
 		Seed: &seed,
-	}, "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	}, "", "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	require.NoError(t, err)
 
 	// Find GetUser response
@@ -178,7 +178,7 @@ func TestNewProtoHandler_CustomRows(t *testing.T) {
 		Path: "testdata/simple.proto",
 		Rows: &rows,
 		Seed: &seed,
-	}, "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	}, "", "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	require.NoError(t, err)
 
 	// Find ListUsers response - it has repeated GetUserResponse
@@ -209,7 +209,7 @@ message PingResponse { string pong = 1; }
 
 	ph, err := NewProtoHandler(&config.ProtoConfig{
 		Path: dir,
-	}, "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	}, "", "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	require.NoError(t, err)
 	// Package should be empty since proto has no package declaration
 	require.Equal(t, "", ph.Package())
@@ -218,7 +218,7 @@ message PingResponse { string pong = 1; }
 func TestNewProtoHandler_ExplicitPackageOverridesProto(t *testing.T) {
 	ph, err := NewProtoHandler(&config.ProtoConfig{
 		Path: "testdata/simple.proto",
-	}, "override.v2", slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	}, "override.v2", "", slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	require.NoError(t, err)
 
 	// Proto package is test.v1, but override.v2 should be used in routes

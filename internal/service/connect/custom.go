@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"connectrpc.com/connect"
 	"github.com/hashicorp/hcl/v2"
@@ -12,6 +13,10 @@ import (
 	configconnect "github.com/jumppad-labs/polymorph/internal/config/connect"
 	"github.com/jumppad-labs/polymorph/internal/step"
 	"github.com/zclconf/go-cty/cty"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/dynamicpb"
 )
 
 // CustomMethodHandler handles custom Connect-RPC methods with steps
@@ -19,47 +24,56 @@ type CustomMethodHandler struct {
 	method      *configconnect.Handler
 	packageName string
 	serviceName string
+	prefix      string
 	serviceVars map[string]cty.Value
+	outputDesc  protoreflect.MessageDescriptor
 }
 
 // NewCustomMethodHandler creates a new custom method handler
-func NewCustomMethodHandler(method *configconnect.Handler, packageName, serviceName string, serviceVars map[string]cty.Value) (*CustomMethodHandler, error) {
+func NewCustomMethodHandler(method *configconnect.Handler, packageName, serviceName, prefix string, serviceVars map[string]cty.Value) (*CustomMethodHandler, error) {
 	return &CustomMethodHandler{
 		method:      method,
 		packageName: packageName,
 		serviceName: serviceName,
+		prefix:      prefix,
 		serviceVars: serviceVars,
 	}, nil
+}
+
+// SetOutputDescriptor sets the protobuf output message descriptor for proto-aware responses.
+func (h *CustomMethodHandler) SetOutputDescriptor(desc protoreflect.MessageDescriptor) {
+	h.outputDesc = desc
 }
 
 // RegisterHandler registers this custom method and returns the path and handler function
 func (h *CustomMethodHandler) RegisterHandler() (string, http.HandlerFunc) {
 	// Create the method path: /api.v1.UserService/MethodName
-	methodPath := fmt.Sprintf("/%s.%s/%s", h.packageName, h.serviceName, h.method.Name)
+	methodPath := fmt.Sprintf("%s/%s.%s/%s", h.prefix, h.packageName, h.serviceName, h.method.Name)
 
 	return methodPath, h.handleMethod
 }
 
 // handleMethod handles the custom RPC method
 func (h *CustomMethodHandler) handleMethod(w http.ResponseWriter, r *http.Request) {
-	// Parse request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		h.writeError(w, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid request: %w", err)))
 		return
 	}
-	defer r.Body.Close()
+	defer r.Body.Close() //nolint:errcheck
 
+	// Parse request — for protobuf requests we can't easily decode arbitrary proto
 	var req map[string]any
-	if err := json.Unmarshal(body, &req); err != nil {
-		h.writeError(w, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid request: %w", err)))
-		return
+	if !wantsProto(r) {
+		if err := json.Unmarshal(body, &req); err != nil {
+			req = map[string]any{}
+		}
+	} else {
+		req = map[string]any{}
 	}
 
-	// Build evaluation context from request
 	evalCtx := buildEvalContext(req, h.serviceVars)
 
-	// Execute steps if present
 	if len(h.method.Steps) > 0 {
 		executor := step.NewExecutor(h.method.Steps)
 		if err := executor.Execute(r.Context(), evalCtx); err != nil {
@@ -68,42 +82,44 @@ func (h *CustomMethodHandler) handleMethod(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	// Evaluate response body expression if present
-	var response any
+	// Evaluate response body expression to JSON bytes
+	var jsonBytes []byte
 	if h.method.Response != nil && h.method.Response.BodyExpr != nil {
 		value, diags := h.method.Response.BodyExpr.Value(evalCtx)
 		if diags.HasErrors() {
 			h.writeError(w, connect.NewError(connect.CodeInternal, fmt.Errorf("response evaluation failed: %s", diags.Error())))
 			return
 		}
-
-		// Parse the response body as JSON
-		bodyStr := value.AsString()
-		if err := json.Unmarshal([]byte(bodyStr), &response); err != nil {
-			// If it's not JSON, return as string
-			response = map[string]any{"result": bodyStr}
-		}
+		jsonBytes = []byte(value.AsString())
 	} else {
-		// Empty response
-		response = map[string]any{}
+		jsonBytes = []byte("{}")
 	}
 
-	// Write response
-	h.writeResponse(w, response)
+	h.writeResponse(w, r, jsonBytes)
 }
 
-// writeResponse writes a successful Connect-RPC response
-func (h *CustomMethodHandler) writeResponse(w http.ResponseWriter, resp any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+// wantsProto returns true when the caller expects a protobuf-encoded response.
+func wantsProto(r *http.Request) bool {
+	return strings.Contains(r.Header.Get("Content-Type"), "proto")
+}
 
-	data, err := json.Marshal(resp)
-	if err != nil {
-		h.writeError(w, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to marshal response: %w", err)))
-		return
+// writeResponse writes a Connect-RPC response, negotiating the wire format.
+func (h *CustomMethodHandler) writeResponse(w http.ResponseWriter, r *http.Request, jsonBytes []byte) {
+	if wantsProto(r) && h.outputDesc != nil {
+		msg := dynamicpb.NewMessage(h.outputDesc)
+		if err := protojson.Unmarshal(jsonBytes, msg); err == nil {
+			if data, err := proto.Marshal(msg); err == nil {
+				w.Header().Set("Content-Type", "application/proto")
+				w.WriteHeader(http.StatusOK)
+				w.Write(data) //nolint:errcheck
+				return
+			}
+		}
 	}
 
-	w.Write(data)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonBytes) //nolint:errcheck
 }
 
 // writeError writes a Connect-RPC error response

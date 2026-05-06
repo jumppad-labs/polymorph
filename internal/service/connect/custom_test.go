@@ -137,7 +137,7 @@ func TestCustomMethodHandler(t *testing.T) {
 		Name: "TestMethod",
 	}
 
-	handler, err := NewCustomMethodHandler(method, "api.v1", "UserService", nil)
+	handler, err := NewCustomMethodHandler(method, "api.v1", "UserService", "", nil)
 	require.NoError(t, err)
 	require.NotNil(t, handler)
 	require.Equal(t, "TestMethod", handler.method.Name)
