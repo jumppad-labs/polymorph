@@ -2,9 +2,11 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -107,6 +109,15 @@ func TestHTTPService_ServeHTTP(t *testing.T) {
 					BodyExpr: makeExpr(`jsonencode({ status = "healthy" })`),
 				},
 			},
+			{
+				// References an unknown variable so evaluation fails with a
+				// diagnostic message containing double quotes.
+				Name:  "broken",
+				Route: "GET /broken",
+				Response: &config.ResponseConfig{
+					BodyExpr: makeExpr(`jsonencode({ value = nope })`),
+				},
+			},
 		},
 	}
 
@@ -161,10 +172,26 @@ func TestHTTPService_ServeHTTP(t *testing.T) {
 		defer resp.Body.Close()
 
 		require.Equal(t, http.StatusNotFound, resp.StatusCode)
+		require.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.JSONEq(t, `{"error":"not found"}`, string(body))
+	})
+
+	// Test evaluation error returns valid JSON with the correct Content-Type
+	t.Run("GET /broken returns JSON error", func(t *testing.T) {
+		resp, err := http.Get(baseURL + "/broken")
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+		require.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+
+		var errBody map[string]string
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&errBody))
+		require.Contains(t, errBody["error"], "response evaluation failed: ")
+		require.Contains(t, errBody["error"], `"nope"`)
 	})
 
 	// Test wrong method
@@ -313,4 +340,18 @@ func TestHTTPService_StaticFilesWithPrefix(t *testing.T) {
 
 		require.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
+}
+
+func TestWriteJSONError(t *testing.T) {
+	rec := httptest.NewRecorder()
+	msg := `step "payments" failed: Get "https://localhost:18443/status": x509: certificate signed by unknown authority`
+
+	writeJSONError(rec, http.StatusInternalServerError, "step execution failed: "+msg)
+
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+	require.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	require.Equal(t, "step execution failed: "+msg, body["error"])
 }
