@@ -206,7 +206,7 @@ func (rh *ResourceHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	case "DELETE":
 		rh.handleDelete(w, r)
 	default:
-		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -214,7 +214,7 @@ func (rh *ResourceHandler) Handle(w http.ResponseWriter, r *http.Request) {
 func (rh *ResourceHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	items, err := rh.store.List(rh.resource.Name)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`{"error":"failed to list items: %v"}`, err), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "failed to list items: "+err.Error())
 		return
 	}
 
@@ -233,16 +233,16 @@ func (rh *ResourceHandler) handleList(w http.ResponseWriter, r *http.Request) {
 func (rh *ResourceHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	id, ok := rh.extractID(r.URL.Path)
 	if !ok {
-		http.Error(w, `{"error":"invalid ID"}`, http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "invalid ID")
 		return
 	}
 
 	item, err := rh.store.Get(rh.resource.Name, id)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
+			writeJSONError(w, http.StatusNotFound, "not found")
 		} else {
-			http.Error(w, fmt.Sprintf(`{"error":"failed to get item: %v"}`, err), http.StatusInternalServerError)
+			writeJSONError(w, http.StatusInternalServerError, "failed to get item: "+err.Error())
 		}
 		return
 	}
@@ -256,12 +256,12 @@ func (rh *ResourceHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 func (rh *ResourceHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	var item map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
-		http.Error(w, fmt.Sprintf(`{"error":"invalid JSON: %v"}`, err), http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
 
 	if err := rh.store.Insert(rh.resource.Name, item); err != nil {
-		http.Error(w, fmt.Sprintf(`{"error":"failed to create item: %v"}`, err), http.StatusInternalServerError)
+		writeJSONError(w, http.StatusInternalServerError, "failed to create item: "+err.Error())
 		return
 	}
 
@@ -274,21 +274,21 @@ func (rh *ResourceHandler) handleCreate(w http.ResponseWriter, r *http.Request) 
 func (rh *ResourceHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	id, ok := rh.extractID(r.URL.Path)
 	if !ok {
-		http.Error(w, `{"error":"invalid ID"}`, http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "invalid ID")
 		return
 	}
 
 	var item map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
-		http.Error(w, fmt.Sprintf(`{"error":"invalid JSON: %v"}`, err), http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
 
 	if err := rh.store.Update(rh.resource.Name, id, item); err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
+			writeJSONError(w, http.StatusNotFound, "not found")
 		} else {
-			http.Error(w, fmt.Sprintf(`{"error":"failed to update item: %v"}`, err), http.StatusInternalServerError)
+			writeJSONError(w, http.StatusInternalServerError, "failed to update item: "+err.Error())
 		}
 		return
 	}
@@ -302,15 +302,15 @@ func (rh *ResourceHandler) handleUpdate(w http.ResponseWriter, r *http.Request) 
 func (rh *ResourceHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 	id, ok := rh.extractID(r.URL.Path)
 	if !ok {
-		http.Error(w, `{"error":"invalid ID"}`, http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "invalid ID")
 		return
 	}
 
 	if err := rh.store.Delete(rh.resource.Name, id); err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
+			writeJSONError(w, http.StatusNotFound, "not found")
 		} else {
-			http.Error(w, fmt.Sprintf(`{"error":"failed to delete item: %v"}`, err), http.StatusInternalServerError)
+			writeJSONError(w, http.StatusInternalServerError, "failed to delete item: "+err.Error())
 		}
 		return
 	}
