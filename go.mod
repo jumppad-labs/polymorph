@@ -1,6 +1,6 @@
 module github.com/jumppad-labs/polymorph
 
-go 1.25.8
+go 1.27.0
 
 require (
 	connectrpc.com/connect v1.19.1
