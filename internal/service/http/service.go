@@ -492,9 +492,7 @@ func (s *HTTPService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// No matching route - return 404
-		wrapped.WriteHeader(http.StatusNotFound)
-		wrapped.Header().Set("Content-Type", "application/json")
-		wrapped.Write([]byte(`{"error":"not found"}`))
+		writeJSONError(wrapped, http.StatusNotFound, "not found")
 		// Log the 404
 		duration := time.Since(start)
 		s.requestLogger.Log(r.Method, r.URL.Path, wrapped.status, duration, getLogLevel(r.URL.Path, wrapped.status))
@@ -693,9 +691,7 @@ func (s *HTTPService) handleRequest(w http.ResponseWriter, r *http.Request, rout
 			s.logger.Error("step execution failed", "handler", handler.Name, "error", err)
 			metrics.RecordError(s.name, handler.Name, "step_failed")
 			span.RecordError(err)
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"error":"step execution failed: %s"}`, err.Error())
+			writeJSONError(w, http.StatusInternalServerError, "step execution failed: "+err.Error())
 			return
 		}
 	}
@@ -708,9 +704,7 @@ func (s *HTTPService) handleRequest(w http.ResponseWriter, r *http.Request, rout
 		value, diags := resp.BodyExpr.Value(evalCtx)
 		if diags.HasErrors() {
 			s.logger.Error("failed to evaluate response body", "handler", handler.Name, "error", diags.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(fmt.Sprintf(`{"error":"response evaluation failed: %s"}`, diags.Error())))
+			writeJSONError(w, http.StatusInternalServerError, "response evaluation failed: "+diags.Error())
 			return
 		}
 
@@ -729,9 +723,7 @@ func (s *HTTPService) handleRequest(w http.ResponseWriter, r *http.Request, rout
 		headersVal, diags := resp.HeadersExpr.Value(evalCtx)
 		if diags.HasErrors() {
 			s.logger.Error("failed to evaluate response headers", "handler", handler.Name, "error", diags.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(fmt.Sprintf(`{"error":"header evaluation failed: %s"}`, diags.Error())))
+			writeJSONError(w, http.StatusInternalServerError, "header evaluation failed: "+diags.Error())
 			return
 		}
 		// Convert to map and set headers (check for null first)
